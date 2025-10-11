@@ -18,7 +18,7 @@
 #
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-from typing import Dict, Optional, Type, Union
+from typing import Dict, List, Optional, Type, Union
 
 from maubot import Plugin, PluginWebApp
 from aiohttp import hdrs, BasicAuth
@@ -71,12 +71,6 @@ class Config(BaseProxyConfig):
         if message_format not in valid_message_formats:
             raise ValueError(f"Invalid message_format '{message_format}' specified! "
                              f"Must be one of: {', '.join(valid_message_formats)}")
-        # validate message_type
-        valid_message_types = {"m.text", "m.notice"}
-        message_type = helper.base["message_type"]
-        if message_type not in valid_message_types:
-            raise ValueError(f"Invalid message_type '{message_type}' specified! "
-                             f"Must be one of: {', '.join(valid_message_types)}")
 
         # validate auth_type and auth_token
         valid_auth_types = {"Basic", "Bearer"}
@@ -101,29 +95,24 @@ class WebhookPlugin(Plugin):
     config: BaseProxyConfig
     webapp: PluginWebApp
 
+    TEMPLATES: List[str] = ["room", "message", "message_type"]
+
     @classmethod
     def get_config_class(cls) -> Type[BaseProxyConfig]:
         return Config
 
     def on_external_config_update(self) -> None:
-        old_path, old_method = self.config["path"], self.config["method"]
-        old_room, old_message = self.config["room"], self.config["message"]
+        old_config = self.config.clone()
         super().on_external_config_update()
-        new_path, new_method = self.config["path"], self.config["method"]
-        new_room, new_message = self.config["room"], self.config["message"]
-        if old_path != new_path or old_method != new_method:
+        if old_config["path"] != self.config["path"] or old_config["method"] != self.config["method"]:
             self.log.debug("Path or method changed, restarting webhook...")
             self.webapp.clear()
             self.register_webhook()
-        if old_room != new_room:
-            self.reload_template("room")
-        if old_message != new_message:
-            self.reload_template("message")
-
-    def reload_template(self, key: str) -> None:
-        self.log.debug(f"{key.capitalize()} changed, reloading template...")
-        self.load_template(key)
-        self.log.info(f"Successfully reloaded {key} template")
+        for key in self.TEMPLATES:
+            if old_config[key] != self.config[key]:
+                self.log.debug(f"{key.capitalize()} changed, reloading template...")
+                self.load_template(key)
+                self.log.info(f"Successfully reloaded {key} template")
 
     def load_template(self, key: str) -> None:
         try:
@@ -157,8 +146,8 @@ class WebhookPlugin(Plugin):
         self.jinja_env.filters["escape_md"] = escape_md
 
         self.config.load_and_update()
-        self.load_template("room")
-        self.load_template("message")
+        for key in self.TEMPLATES:
+            self.load_template(key)
         self.register_webhook()
 
     async def handle_request(self, req: Request) -> Response:
@@ -225,7 +214,11 @@ class WebhookPlugin(Plugin):
                           "but the template generated an empty message.")
             return Response()
 
-        msgtype = self.config["message_type"]
+        message_type: Union[str, Response] = self.render_template("message_type", template_variables)
+        if isinstance(message_type, Response):
+            return message_type
+        msgtype = mautrix.types.MessageType(message_type)
+
         self.log.info(f"Sending message ({msgtype}) to room {room}: {message}")
         try:
             if self.config["message_format"] == 'markdown':

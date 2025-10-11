@@ -104,7 +104,8 @@ The format the message is interpreted as. Must be one of:
 
 
 ### `message_type`
-The type the message is sent as. Must be one of:
+The type the message is sent as.
+Supports formatting [as defined below](#formatting), but must evaluate to one of:
 - `m.text` (default)
 - `m.notice`
 
