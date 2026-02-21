@@ -37,7 +37,9 @@ message: |
     **{{ json.PrinterName }} - {{ json.Event }}**  
     **File:** {{ json.FileName }}  
     **Print Time:** {{ json.Duration }}  
+    {% if json.Error %}
     **Errors:** {{ json.Error }}  
+    {% endif %}
     [Check In With Quick View]({{ json.QuickViewUrl }})  
     [Final Snapshot]({{ json.SnapshotUrl }})  
 message_format: markdown
