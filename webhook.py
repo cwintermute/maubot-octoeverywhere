@@ -1,5 +1,6 @@
-# maubot-webhook - A maubot plugin to send messages using webhooks
-# Copyright (C) 2024 maubot-webhook Contributors
+# maubot-octoeverwhere - A maubot plugin to send Octoeverywhere notifications using webhooks
+# Original work Copyright (C) 2024 maubot-webhook Contributors
+# New code Copyright (C) 2026 Cassie Wintermute
 #
 # This file is part of maubot-webhook.
 #
@@ -34,6 +35,36 @@ def escape_md(value: str) -> str:
     # replacing < and > is not necessary as HTML autoescaping is performed anyway
     return re.sub(r'([\\`*_[\]])', r'\\\1', value)
 
+def enumEventType(value: int) -> str:
+    # Based on https://octoeverywhere.stoplight.io/docs/octoeverywhere-api-docs/fc62f8ab64bbb-notification-webhooks
+    # List current 2026-02-17
+    types = {
+        1: "Print Started",
+        2: "Print Completed",
+        3: "Print Failed",
+        4: "Print Paused",
+        5: "Print Resumed",
+        6: "Print Progress",
+        7: "Gadget Possible Failure Warning",
+        8: "Gadget Paused Print Due To Failure",
+        9: "Print Error",
+        10: "First Layer Complete",
+        11: "Filament Change Required",
+        12: "User Interaction Required",
+        13: "Non-Supporter Notification Limit",
+        14: "Third Layer Complete",
+        15: "Bed Cooldown Complete",
+        16: "Test Message",
+    }
+    if value not in types:
+        return "Missing Value!"    
+    return types[value]
+
+def convert(seconds: int) -> str:
+    # Taken From https://www.geeksforgeeks.org/python/python-program-to-convert-seconds-into-hours-minutes-and-seconds/
+    min, sec = divmod(seconds, 60)
+    hour, min = divmod(min, 60)
+    return '%d:%02d:%02d' % (hour, min, sec)
 
 class Config(BaseProxyConfig):
     def do_update(self, helper: ConfigUpdateHelper) -> None:
@@ -197,6 +228,11 @@ class WebhookPlugin(Plugin):
                 error_message = f"Failed to parse JSON: {e}"
                 return Response(status=400, text=error_message)
             template_variables["json"] = json
+            # Enumerate and convert values into human readable formats
+            if "EventType" in json:
+                template_variables["json"]["Event"] = enumEventType(json["EventType"])
+            if "DurationSec" in json:
+                template_variables["json"]["Duration"] = convert(json["DurationSec"])
 
         room: Union[str, Response] = self.render_template("room", template_variables)
         if isinstance(room, Response):

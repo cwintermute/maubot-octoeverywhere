@@ -1,6 +1,7 @@
-# maubot-webhook
-A [maubot](https://github.com/maubot/maubot) plugin to send messages using webhooks.
+# maubot-octoeverywhere
+A [maubot](https://github.com/maubot/maubot) plugin to send OctoEverywhere notifications via webhook.
 
+# THIS IS A QUICK HACK. DOCUMENTATION AND UPDATES ARE NEEDED
 
 
 ## Features
@@ -11,7 +12,7 @@ A [maubot](https://github.com/maubot/maubot) plugin to send messages using webho
 
 
 ## Installation
-Either download an `.mbp` file from the [release assets](https://github.com/jkhsjdhjs/maubot-webhook/releases) or [build one yourself](#building).
+Either download an `.mbp` file from the [release assets](https://github.com/cwintermute/maubot-octoeverwhere/releases) or [build one yourself](#building).
 Then, [upload](https://docs.mau.fi/maubot/usage/basic.html#uploading-plugins) it to your maubot instance.
 
 Furthermore, this plugin requires Jinja2 for template rendering. However, since maubot already depends on Jinja2, you shouldn't have to install it manually.
@@ -19,7 +20,7 @@ Furthermore, this plugin requires Jinja2 for template rendering. However, since 
 
 
 ## Usage
-Create a new instance in the maubot management interface and select `me.jkhsjdhjs.maubot.webhook` as `Type`.
+Create a new instance in the maubot management interface and select `me.cwintermute.maubot.octoeverwhere` as `Type`.
 The client selected as `Primary user` will be used to send the messages.
 
 Each instance of this plugin provides a single webhook.
@@ -33,32 +34,21 @@ path: /send
 method: POST
 room: '!AAAAAAAAAAAAAAAAAA:example.com'
 message: |
-    **{{ json.title }}**
-    {% for text in json.list %}
-    - {{ text }}
-    {% endfor %}
+    **{{ json.PrinterName }} - {{ json.Event }}**  
+    **File:** {{ json.FileName }}  
+    **Print Time:** {{ json.Duration }}  
+    **Errors:** {{ json.Error }}  
+    [Check In With Quick View]({{ json.QuickViewUrl }})  
+    [Final Snapshot]({{ json.SnapshotUrl }})  
 message_format: markdown
 message_type: m.text
-auth_type: Basic
-auth_token: abc:123
+auth_type:
+auth_token:
 force_json: false
 ignore_empty_messages: false
 ```
-
-```bash
-$ curl -X POST -H "Content-Type: application/json" -u abc:123 https://your.maubot.instance/_matrix/maubot/plugin/<instance ID>/send -d '
-{
-    "title": "This is a test message:",
-    "list": [
-        "Hello",
-        "World!"
-    ]
-}'
-```
-
-![Screenshot of the resulting message](https://screens.totally.rip/2023/02/63e0f862ca140.png)
-
-
+## To Test:
+Go to your Notification Settings at [octoeverywhere](https://octoeverywhere.com/)
 
 ## Configuration
 This plugin has the following settings you can configure:
@@ -111,6 +101,7 @@ Supports formatting [as defined below](#formatting), but must evaluate to one of
 
 
 ### `auth_type`
+**DOES NOT WORK CURRENTLY**
 This can be used to protect a webhook against unauthorized access.
 Can be one of `Basic` for HTTP basic auth with username and password or `Bearer` for bearer token auth.
 Leave empty to disable authorization.
@@ -118,6 +109,7 @@ The username/password or token is specified via the [`auth_token`](#auth_token) 
 
 
 ### `auth_token`
+**DOES NOT WORK CURRENTLY**
 This specifies the username/password or token for authorization, depending on [`auth_type`](#auth_type).
 If `auth_type` is `Basic`, this must be the username and password, separated by a colon (\<username\>:\<password\>).
 If `auth_type` is `Bearer`, this is the token used for token bearer authorization, so requests must carry an `Authorization: Bearer <token>` header.
