@@ -60,7 +60,7 @@ def enumEventType(value: int) -> str:
         return "Missing Value!"    
     return types[value]
 
-def convert(seconds: int) -> str:
+def convertTime(seconds: int) -> str:
     # Taken From https://www.geeksforgeeks.org/python/python-program-to-convert-seconds-into-hours-minutes-and-seconds/
     min, sec = divmod(seconds, 60)
     hour, min = divmod(min, 60)
@@ -88,7 +88,6 @@ class Config(BaseProxyConfig):
         helper.copy("message")
         helper.copy("message_format")
         helper.copy("message_type")
-        helper.copy("auth_type")
         helper.copy("auth_token")
         helper.copy("force_json")
         helper.copy("ignore_empty_messages")
@@ -102,22 +101,6 @@ class Config(BaseProxyConfig):
         if message_format not in valid_message_formats:
             raise ValueError(f"Invalid message_format '{message_format}' specified! "
                              f"Must be one of: {', '.join(valid_message_formats)}")
-
-        # validate auth_type and auth_token
-        valid_auth_types = {"Basic", "Bearer"}
-        auth_type = helper.base["auth_type"]
-        if auth_type is not None:
-            auth_type = auth_type.capitalize()
-            if auth_type not in valid_auth_types:
-                raise ValueError(f"Invalid auth_type '{auth_type}' specified! "
-                                 f"Must be one of: {', '.join(valid_auth_types)}")
-            auth_token = helper.base["auth_token"]
-            if auth_token is None:
-                raise ValueError("No auth_token specified!")
-            if auth_type == "Basic" and ":" not in auth_token:
-                raise ValueError(f"Invalid auth_token '{auth_token}' specified! For HTTP basic auth, it must contain "
-                                 "a username and a password, separated by a colon (<username>:<password>).")
-
 
 class WebhookPlugin(Plugin):
     # config and webapp are declared as Optional in the superclass,
@@ -183,37 +166,12 @@ class WebhookPlugin(Plugin):
 
     async def handle_request(self, req: Request) -> Response:
         self.log.debug(f"Got request {req}")
-        config_auth_type: Optional[str] = self.config["auth_type"]
 
         def unauthorized(text: str) -> Response:
             # config_auth_type can be None, but the function is not called in this case.
             # Thus, we can ignore the type here.
             return Response(status=401, headers={hdrs.WWW_AUTHENTICATE: config_auth_type},  # type: ignore[arg-type]
                             text=text)
-
-        if config_auth_type is not None:
-            config_auth_type = config_auth_type.capitalize()
-            auth_header: Optional[str] = req.headers.get(hdrs.AUTHORIZATION)
-            if auth_header is None:
-                return unauthorized("Missing authorization header")
-            auth_header_split = auth_header.split(' ', 1)
-            if len(auth_header_split) < 2:
-                return unauthorized("Invalid authorization header format")
-            auth_type, auth_token = auth_header_split
-            auth_type = auth_type.capitalize()
-            config_auth_token = self.config["auth_token"]
-            if auth_type != config_auth_type:
-                return unauthorized(f"Unsupported authorization type: {auth_type}")
-            if auth_type == "Basic":
-                try:
-                    basic_auth_header = BasicAuth.decode(auth_header)
-                except ValueError as e:
-                    return unauthorized(f"Invalid authorization header format: {e}")
-                if BasicAuth(*config_auth_token.split(":", 1)) != basic_auth_header:
-                    return unauthorized("Invalid username or password")
-            elif auth_type == "Bearer" and auth_token != config_auth_token:
-                return unauthorized("Invalid authorization token")
-            self.log.debug("Auth token is valid")
 
         template_variables = {
             "path": dict(req.match_info),
@@ -227,12 +185,20 @@ class WebhookPlugin(Plugin):
             except ValueError as e:
                 error_message = f"Failed to parse JSON: {e}"
                 return Response(status=400, text=error_message)
+            # Check and see if we are provided an auth token
+            if self.config["auth_token"]:
+                # Time to validate
+                if not "SecretKey" in json:
+                    return Response(status=400, text="Missing Secret Key")
+                if self.config["auth_token"] != json["SecretKey"]:
+                     return Response(status=400, text="Invalid Secret Key")
+                     
             template_variables["json"] = json
             # Enumerate and convert values into human readable formats
             if "EventType" in json:
                 template_variables["json"]["Event"] = enumEventType(json["EventType"])
             if "DurationSec" in json:
-                template_variables["json"]["Duration"] = convert(json["DurationSec"])
+                template_variables["json"]["Duration"] = convertTime(json["DurationSec"])
 
         room: Union[str, Response] = self.render_template("room", template_variables)
         if isinstance(room, Response):
